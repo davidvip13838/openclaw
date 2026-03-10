@@ -1,0 +1,33 @@
+const { contextBridge, ipcRenderer } = require("electron");
+
+contextBridge.exposeInMainWorld("openclaw", {
+  // Run a shell command, returns { stdout, stderr, exitCode }
+  runCommand: (command) => ipcRenderer.invoke("run-command", command),
+
+  // Run a command with streaming output (listen via onCommandOutput)
+  runCommandStream: (command) => ipcRenderer.invoke("run-command-stream", command),
+
+  // Check Node.js, npm, openclaw versions
+  checkPrerequisites: () => ipcRenderer.invoke("check-prerequisites"),
+
+  // Read ~/.openclaw/openclaw.json
+  readConfig: () => ipcRenderer.invoke("read-config"),
+
+  // Write to ~/.openclaw/openclaw.json
+  writeConfig: (config) => ipcRenderer.invoke("write-config", config),
+
+  // Write an auth profile (API key) for a provider
+  writeAuthProfile: ({ provider, apiKey }) =>
+    ipcRenderer.invoke("write-auth-profile", { provider, apiKey }),
+
+  // Install the system daemon
+  installDaemon: () => ipcRenderer.invoke("install-daemon"),
+
+  // Open URL in default browser
+  openExternal: (url) => ipcRenderer.invoke("open-external", url),
+
+  // Listen for streaming command output
+  onCommandOutput: (callback) => {
+    ipcRenderer.on("command-output", (_event, data) => callback(data));
+  },
+});
