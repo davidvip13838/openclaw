@@ -7,6 +7,7 @@ import { renderWelcome } from "./screens/welcome.js";
 import { renderPrerequisites } from "./screens/prerequisites.js";
 import { renderProvider } from "./screens/provider.js";
 import { renderChannels } from "./screens/channels.js";
+import { renderSandbox } from "./screens/sandbox.js";
 import { renderInstalling } from "./screens/installing.js";
 import { renderComplete } from "./screens/complete.js";
 
@@ -15,8 +16,9 @@ const screens = [
   { id: "prerequisites", render: renderPrerequisites, step: 2 },
   { id: "provider", render: renderProvider, step: 3 },
   { id: "channels", render: renderChannels, step: 4 },
-  { id: "installing", render: renderInstalling, step: 5 },
-  { id: "complete", render: renderComplete, step: 6 },
+  { id: "sandbox", render: renderSandbox, step: 5 },
+  { id: "installing", render: renderInstalling, step: 6 },
+  { id: "complete", render: renderComplete, step: 7 },
 ];
 
 // Shared wizard state — each screen reads/writes to this
@@ -26,6 +28,7 @@ export const wizardState = {
   model: "",
   channels: {},         // { whatsapp: true, telegram: false, ... }
   channelConfigs: {},   // { telegram: { botToken: "..." }, ... }
+  sandbox: { enabled: false },  // { enabled: true } for Safe Mode
 };
 
 let currentIndex = 0;

@@ -1,19 +1,37 @@
 /**
- * Screen 5: Installing
+ * Screen 6: Installing
  * Writes config, sets up workspace, installs CLI if needed, starts gateway.
+ * If Safe Mode (sandbox) is enabled, also installs Docker, pulls the sandbox
+ * image, and verifies workspace mount — all behind a progress bar.
  * Does NOT advance to Complete until the gateway is confirmed running.
  */
 import { nextScreen, wizardState } from "../app.js";
 
-const steps = [
+const baseSteps = [
   { id: "config", label: "Writing configuration…", doneLabel: "Configuration saved" },
   { id: "workspace", label: "Setting up workspace…", doneLabel: "Workspace ready" },
   { id: "cli", label: "Checking OpenClaw CLI…", doneLabel: "OpenClaw CLI ready" },
+];
+
+const sandboxSteps = [
+  { id: "docker-check", label: "Checking Docker…", doneLabel: "Docker ready" },
+  { id: "docker-install", label: "Installing Docker…", doneLabel: "Docker installed" },
+  { id: "docker-start", label: "Starting Docker…", doneLabel: "Docker running" },
+  { id: "sandbox-image", label: "Downloading Safe Mode environment…", doneLabel: "Safe Mode environment ready" },
+  { id: "sandbox-verify", label: "Verifying Safe Mode…", doneLabel: "Safe Mode verified ✓" },
+];
+
+const finalSteps = [
   { id: "daemon", label: "Installing system service…", doneLabel: "System service installed" },
   { id: "gateway", label: "Starting gateway…", doneLabel: "Gateway running ✨" },
 ];
 
 export async function renderInstalling(container) {
+  const useSandbox = wizardState.sandbox?.enabled === true;
+  const steps = [...baseSteps, ...(useSandbox ? sandboxSteps : []), ...finalSteps];
+  // Track which steps to skip (e.g. Docker already installed)
+  const skippedSteps = new Set();
+
   container.innerHTML = `
     <h1 class="screen-title" style="text-align: center;">Setting Up OpenClaw</h1>
     <p class="screen-subtitle" style="text-align: center;">
@@ -106,8 +124,128 @@ export async function renderInstalling(container) {
     return { detail: ver.stdout.trim() || "installed" };
   });
 
-  // ── Step 4: Install daemon ──────────────────────────────
-  await runStep(3, "daemon", async () => {
+  // ── Sandbox Docker steps (only when Safe Mode enabled) ──
+  if (useSandbox) {
+    // Show a note before starting Docker steps
+    if (progressLabel) {
+      progressLabel.textContent = "Safe Mode setup takes a few extra minutes the first time…";
+      await sleep(800);
+    }
+
+    // Step: Check if Docker is already available
+    let dockerReady = false;
+    await runStep(stepIndexOf("docker-check"), "docker-check", async () => {
+      const check = await window.openclaw.runCommand(
+        "docker version --format '{{.Server.Version}}' 2>/dev/null"
+      );
+      if (check.exitCode === 0) {
+        dockerReady = true;
+        markSkipped("docker-install");
+        markSkipped("docker-start");
+        return { detail: `v${check.stdout.trim()}` };
+      }
+      // Check if CLI exists but daemon not running
+      const cliCheck = await window.openclaw.runCommand("which docker 2>/dev/null");
+      if (cliCheck.exitCode === 0) {
+        markSkipped("docker-install");
+        return { detail: "Installed, needs starting" };
+      }
+      return { detail: "Not installed — will set up now" };
+    });
+
+    // Step: Download and install Docker Desktop
+    await runStep(stepIndexOf("docker-install"), "docker-install", async () => {
+      // Detect CPU architecture
+      const arch = await window.openclaw.runCommand("uname -m");
+      const dmgUrl = arch.stdout.includes("arm64")
+        ? "https://desktop.docker.com/mac/main/arm64/Docker.dmg"
+        : "https://desktop.docker.com/mac/main/amd64/Docker.dmg";
+
+      // Download (~600MB)
+      updateDetail("docker-install", "Downloading Docker (this may take a few minutes)…");
+      const download = await window.openclaw.runCommand(
+        `curl -L -o /tmp/Docker.dmg "${dmgUrl}" 2>&1`
+      );
+      if (download.exitCode !== 0) {
+        throw new Error("Download failed — check your internet connection");
+      }
+
+      // Mount disk image, copy app, unmount, clean up
+      updateDetail("docker-install", "Installing Docker…");
+      await window.openclaw.runCommand("hdiutil attach /tmp/Docker.dmg -nobrowse -quiet");
+      const copy = await window.openclaw.runCommand(
+        'cp -R "/Volumes/Docker/Docker.app" /Applications/ 2>&1'
+      );
+      await window.openclaw.runCommand('hdiutil detach "/Volumes/Docker" -quiet 2>/dev/null');
+      await window.openclaw.runCommand("rm -f /tmp/Docker.dmg");
+
+      if (copy.exitCode !== 0) {
+        throw new Error("Couldn't install Docker — try running as admin");
+      }
+      return { detail: "Docker installed to Applications" };
+    });
+
+    // Step: Launch Docker Desktop and wait for daemon
+    if (!dockerReady) {
+      await runStep(stepIndexOf("docker-start"), "docker-start", async () => {
+        updateDetail("docker-start", "Starting Docker — you may see a security prompt…");
+        await window.openclaw.runCommand("open -a Docker");
+
+        // Poll until daemon responds (up to 90 seconds)
+        for (let i = 0; i < 45; i++) {
+          await sleep(2000);
+          const probe = await window.openclaw.runCommand(
+            "docker version --format '{{.Server.Version}}' 2>/dev/null"
+          );
+          if (probe.exitCode === 0) {
+            return { detail: `Docker v${probe.stdout.trim()} running` };
+          }
+          updateDetail("docker-start",
+            `Waiting for Docker to start (${(i + 1) * 2}s)… You may see a security prompt.`
+          );
+        }
+        throw new Error(
+          "Docker is taking too long to start. Open Docker Desktop manually and try again."
+        );
+      });
+    }
+
+    // Step: Pull sandbox base image
+    await runStep(stepIndexOf("sandbox-image"), "sandbox-image", async () => {
+      updateDetail("sandbox-image", "Downloading Safe Mode environment — this may take a minute…");
+      const pull = await window.openclaw.runCommand("docker pull debian:bookworm-slim 2>&1");
+      if (pull.exitCode !== 0) {
+        throw new Error("Couldn't download — check your internet connection");
+      }
+      // Tag as the sandbox image (matches OpenClaw's default)
+      await window.openclaw.runCommand(
+        "docker tag debian:bookworm-slim openclaw-sandbox:bookworm-slim"
+      );
+      return { detail: "Safe Mode environment ready" };
+    });
+
+    // Step: Verify workspace mount works
+    await runStep(stepIndexOf("sandbox-verify"), "sandbox-verify", async () => {
+      const test = await window.openclaw.runCommand(
+        'docker run --rm -v "$HOME/.openclaw/workspace:/workspace:rw" ' +
+        'openclaw-sandbox:bookworm-slim ls /workspace 2>&1'
+      );
+      if (test.exitCode !== 0) {
+        const out = test.stderr || test.stdout || "";
+        if (out.includes("Mounts denied") || out.includes("not shared")) {
+          throw new Error(
+            "Docker needs permission to access your files. " +
+            "Open Docker Desktop → Settings → Resources → File Sharing, " +
+            "and add your home folder."
+          );
+        }
+        throw new Error("Safe Mode verification failed — " + out);
+      }
+      return { detail: "Safe Mode verified ✓" };
+    });
+  }
+
+  await runStep(stepIndexOf("daemon"), "daemon", async () => {
     const check = await window.openclaw.runCommand("which openclaw 2>/dev/null");
     if (check.exitCode !== 0) {
       throw new Error("CLI not available — skipped");
@@ -116,7 +254,7 @@ export async function renderInstalling(container) {
   });
 
   // ── Step 5: Start gateway and verify ────────────────────
-  await runStep(4, "gateway", async () => {
+  await runStep(stepIndexOf("gateway"), "gateway", async () => {
     const check = await window.openclaw.runCommand("which openclaw 2>/dev/null");
     if (check.exitCode !== 0) {
       throw new Error("CLI not available — can't start gateway");
@@ -162,12 +300,30 @@ export async function renderInstalling(container) {
 
   // ── Helpers ─────────────────────────────────────────────
 
+  function stepIndexOf(id) {
+    return steps.findIndex((s) => s.id === id);
+  }
+
   function updateDetail(id, text) {
     const el = document.getElementById(`detail-${id}`);
     if (el) el.textContent = text;
   }
 
+  function markSkipped(id) {
+    skippedSteps.add(id);
+    const item = document.getElementById(`install-${id}`);
+    if (item) {
+      const icon = item.querySelector(".status-icon");
+      const name = item.querySelector(".status-name");
+      icon.className = "status-icon success";
+      icon.textContent = "⏭️";
+      name.textContent = "Skipped";
+    }
+  }
+
   async function runStep(index, id, work) {
+    if (skippedSteps.has(id)) return;
+
     const percent = Math.round((index / steps.length) * 100);
     progressFill.style.width = `${percent}%`;
     progressLabel.textContent = steps[index].label;
@@ -266,6 +422,14 @@ function buildConfig() {
         appToken: slackConfig.appToken || "",
       };
     }
+  }
+
+  // Sandbox mode (Safe Mode)
+  if (wizardState.sandbox?.enabled) {
+    config.agents.defaults.sandbox = {
+      mode: "all",
+      workspaceAccess: "rw",
+    };
   }
 
   return config;
