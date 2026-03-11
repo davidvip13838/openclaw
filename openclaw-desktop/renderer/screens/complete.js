@@ -1,5 +1,5 @@
 /**
- * Screen 6: Setup Complete 🎉
+ * Screen 8: Setup Complete 🎉
  * Shows context-aware status based on what's actually installed / running.
  */
 
@@ -26,10 +26,14 @@ export async function renderComplete(container) {
   const cliCheck = await window.openclaw.runCommand("which openclaw 2>/dev/null");
   const hasCli = cliCheck.exitCode === 0;
 
-  const gatewayCheck = await window.openclaw.runCommand(
-    "curl -s -o /dev/null -w '%{http_code}' http://localhost:18789/ 2>/dev/null || echo 'unreachable'"
-  );
-  const isRunning = gatewayCheck.stdout === "200" || gatewayCheck.stdout === "401" || gatewayCheck.stdout === "302";
+  // Inefficiency #5 fix: Use fetch() directly instead of spawning curl via shell
+  let isRunning = false;
+  try {
+    const res = await fetch("http://localhost:18789/", { signal: AbortSignal.timeout(3000) });
+    isRunning = res.status === 200 || res.status === 401 || res.status === 302;
+  } catch {
+    isRunning = false;
+  }
 
   // Always show config saved
   statusList.innerHTML = `
@@ -158,10 +162,13 @@ export async function renderComplete(container) {
       await window.openclaw.runCommand("openclaw gateway start --background 2>&1 || true");
       await new Promise((r) => setTimeout(r, 3000));
 
-      const recheck = await window.openclaw.runCommand(
-        "curl -s -o /dev/null -w '%{http_code}' http://localhost:18789/ 2>/dev/null || echo 'down'"
-      );
-      const nowRunning = recheck.stdout === "200" || recheck.stdout === "401" || recheck.stdout === "302";
+      let nowRunning = false;
+      try {
+        const res = await fetch("http://localhost:18789/", { signal: AbortSignal.timeout(3000) });
+        nowRunning = res.status === 200 || res.status === 401 || res.status === 302;
+      } catch {
+        nowRunning = false;
+      }
 
       if (nowRunning) {
         renderComplete(container);

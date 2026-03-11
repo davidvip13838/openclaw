@@ -9,6 +9,7 @@ import { renderProvider } from "./screens/provider.js";
 import { renderChannels } from "./screens/channels.js";
 import { renderSandbox } from "./screens/sandbox.js";
 import { renderInstalling } from "./screens/installing.js";
+import { renderPairing } from "./screens/pairing.js";
 import { renderComplete } from "./screens/complete.js";
 
 const screens = [
@@ -18,7 +19,8 @@ const screens = [
   { id: "channels", render: renderChannels, step: 4 },
   { id: "sandbox", render: renderSandbox, step: 5 },
   { id: "installing", render: renderInstalling, step: 6 },
-  { id: "complete", render: renderComplete, step: 7 },
+  { id: "pairing", render: renderPairing, step: 7 },
+  { id: "complete", render: renderComplete, step: 8 },
 ];
 
 // Shared wizard state — each screen reads/writes to this
@@ -26,9 +28,10 @@ export const wizardState = {
   provider: null,       // "openai" | "anthropic" | "google" | "custom"
   apiKey: "",
   model: "",
-  channels: {},         // { whatsapp: true, telegram: false, ... }
-  channelConfigs: {},   // { telegram: { botToken: "..." }, ... }
-  sandbox: { enabled: false },  // { enabled: true } for Safe Mode
+  customBaseUrl: "",
+  channelMode: "local", // "local" | "telegram"
+  telegramToken: null,
+  sandbox: { enabled: false },
 };
 
 let currentIndex = 0;

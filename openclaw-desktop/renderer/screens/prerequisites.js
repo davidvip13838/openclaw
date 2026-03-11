@@ -4,13 +4,10 @@
  */
 import { nextScreen } from "../app.js";
 
-// Track live state so install buttons can update it
-let nodeOk = false;
-let clawOk = false;
-
 export async function renderPrerequisites(container) {
-  nodeOk = false;
-  clawOk = false;
+  // Track live state locally (Bug #4 fix: avoid module-level mutable state)
+  let nodeOk = false;
+  let clawOk = false;
 
   container.innerHTML = `
     <h1 class="screen-title">Checking Prerequisites</h1>

@@ -731,3 +731,87 @@ body {
 .scrollable::-webkit-scrollbar-thumb:hover {
   background: var(--border-active);
 }
+
+/* ── Telegram Onboarding ───────────────────────────────────── */
+
+.telegram-container {
+  animation: fadeIn 0.3s ease;
+}
+
+.botfather-instructions {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 24px;
+}
+
+.botfather-instructions h3 {
+  font-size: 16px;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.botfather-instructions h3::before {
+  content: "🤖";
+  font-size: 20px;
+}
+
+.botfather-instructions ol {
+  counter-reset: my-counter;
+  list-style: none;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.botfather-instructions li {
+  position: relative;
+  padding-left: 28px;
+  margin-bottom: 12px;
+}
+
+.botfather-instructions li::before {
+  counter-increment: my-counter;
+  content: counter(my-counter);
+  position: absolute;
+  left: 0;
+  top: 2px;
+  background: var(--border-active);
+  color: var(--text-primary);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.botfather-instructions code {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--accent);
+  font-family: monospace;
+}
+
+.recommended-card {
+  border-color: var(--primary-color) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.recommended-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--primary-color);
+}

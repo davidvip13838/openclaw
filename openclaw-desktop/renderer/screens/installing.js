@@ -260,11 +260,15 @@ export async function renderInstalling(container) {
       throw new Error("CLI not available — can't start gateway");
     }
 
-    // Start the gateway as a launchd service
-    await window.openclaw.runCommand("openclaw gateway start 2>&1 || true");
+    // Ensure workspace directory exists
+    await window.openclaw.runCommand("mkdir -p ~/.openclaw/workspace");
+
+    // Start the gateway from the workspace dir so sandbox containers
+    // get a valid cwd inside their mount namespace (/workspace)
+    await window.openclaw.runCommand("cd ~/.openclaw/workspace && openclaw gateway start 2>&1 || true");
 
     // Also try running it directly in background as fallback
-    await window.openclaw.runCommand("nohup openclaw gateway run --port 18789 --allow-unconfigured > /dev/null 2>&1 &");
+    await window.openclaw.runCommand("cd ~/.openclaw/workspace && nohup openclaw gateway run --port 18789 --allow-unconfigured > /dev/null 2>&1 &");
 
     // Poll until gateway responds
     updateDetail("gateway", "Waiting for gateway to respond…");
@@ -399,29 +403,18 @@ function buildConfig() {
   }
 
   // Channels
-  if (wizardState.channels.telegram && wizardState.channelConfigs.telegram?.botToken) {
-    config.channels = config.channels || {};
-    config.channels.telegram = {
-      botToken: wizardState.channelConfigs.telegram.botToken,
+  if (wizardState.channelMode === "telegram" && wizardState.telegramToken) {
+    config.channels = {
+      telegram: {
+        dmPolicy: "pairing",
+        accounts: {
+          default: {
+            enabled: true,
+            botToken: wizardState.telegramToken,
+          }
+        }
+      }
     };
-  }
-
-  if (wizardState.channels.discord && wizardState.channelConfigs.discord?.token) {
-    config.channels = config.channels || {};
-    config.channels.discord = {
-      token: wizardState.channelConfigs.discord.token,
-    };
-  }
-
-  if (wizardState.channels.slack) {
-    const slackConfig = wizardState.channelConfigs.slack || {};
-    if (slackConfig.botToken) {
-      config.channels = config.channels || {};
-      config.channels.slack = {
-        botToken: slackConfig.botToken,
-        appToken: slackConfig.appToken || "",
-      };
-    }
   }
 
   // Sandbox mode (Safe Mode)

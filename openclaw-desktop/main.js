@@ -7,6 +7,26 @@ const os = require("os");
 const CONFIG_DIR = path.join(os.homedir(), ".openclaw");
 const CONFIG_PATH = path.join(CONFIG_DIR, "openclaw.json");
 
+// Compute augmented PATH once at startup (Inefficiency #1 fix)
+const FULL_PATH = (() => {
+  const extra = [
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    "/opt/homebrew/sbin",
+    path.join(os.homedir(), ".nvm/versions/node"),
+    path.join(os.homedir(), ".volta/bin"),
+    path.join(os.homedir(), ".fnm"),
+  ];
+  return [...extra, process.env.PATH].join(":");
+})();
+
+// Allowlisted command prefixes for security (Security #2 fix)
+const ALLOWED_COMMAND_PREFIXES = [
+  "openclaw", "which", "node", "npm", "brew", "curl",
+  "cat", "mkdir", "uname", "docker", "hdiutil", "open",
+  "nohup", "rm", "pgrep",
+];
+
 let mainWindow;
 
 function createWindow() {
@@ -46,8 +66,13 @@ app.on("activate", () => {
  * Run a shell command and return { stdout, stderr, exitCode }
  */
 ipcMain.handle("run-command", async (_event, command) => {
+  // Security: validate command starts with an allowed prefix
+  const cmdBase = command.trim().split(/\s+/)[0].replace(/^.*\//, "");
+  if (!ALLOWED_COMMAND_PREFIXES.some(p => cmdBase === p)) {
+    return { stdout: "", stderr: `Blocked command: ${cmdBase}`, exitCode: 1 };
+  }
   return new Promise((resolve) => {
-    exec(command, { shell: "/bin/zsh", env: { ...process.env, PATH: getFullPath() } }, (error, stdout, stderr) => {
+    exec(command, { shell: "/bin/zsh", env: { ...process.env, PATH: FULL_PATH } }, (error, stdout, stderr) => {
       resolve({
         stdout: stdout?.trim() ?? "",
         stderr: stderr?.trim() ?? "",
@@ -63,7 +88,7 @@ ipcMain.handle("run-command", async (_event, command) => {
 ipcMain.handle("run-command-stream", async (event, command) => {
   return new Promise((resolve) => {
     const child = spawn("/bin/zsh", ["-c", command], {
-      env: { ...process.env, PATH: getFullPath() },
+      env: { ...process.env, PATH: FULL_PATH },
     });
 
     child.stdout.on("data", (data) => {
@@ -203,7 +228,7 @@ ipcMain.handle("write-auth-profile", async (_event, { provider, apiKey }) => {
 ipcMain.handle("install-daemon", async (event) => {
   return new Promise((resolve) => {
     const child = spawn("/bin/zsh", ["-c", "openclaw gateway install-daemon"], {
-      env: { ...process.env, PATH: getFullPath() },
+      env: { ...process.env, PATH: FULL_PATH },
     });
 
     child.stdout.on("data", (data) => {
@@ -220,22 +245,9 @@ ipcMain.handle("install-daemon", async (event) => {
 
 // ── Helpers ───────────────────────────────────────────────────
 
-function getFullPath() {
-  // Ensure common Node/Homebrew paths are included
-  const extra = [
-    "/usr/local/bin",
-    "/opt/homebrew/bin",
-    "/opt/homebrew/sbin",
-    path.join(os.homedir(), ".nvm/versions/node"),
-    path.join(os.homedir(), ".volta/bin"),
-    path.join(os.homedir(), ".fnm"),
-  ];
-  return [...extra, process.env.PATH].join(":");
-}
-
 function runCmd(command) {
   return new Promise((resolve, reject) => {
-    exec(command, { shell: "/bin/zsh", env: { ...process.env, PATH: getFullPath() } }, (error, stdout, stderr) => {
+    exec(command, { shell: "/bin/zsh", env: { ...process.env, PATH: FULL_PATH } }, (error, stdout, stderr) => {
       if (error) reject(error);
       else resolve({ stdout: stdout?.trim() ?? "", stderr: stderr?.trim() ?? "" });
     });

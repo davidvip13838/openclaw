@@ -1,162 +1,188 @@
 /**
  * Screen 4: Channel Setup
- * Toggle messaging channels on/off, enter channel-specific config.
+ * Dedicated UI for Telegram and Local Webchat.
  */
 import { nextScreen, prevScreen, wizardState } from "../app.js";
 
-const channels = [
-  { id: "whatsapp", name: "WhatsApp", icon: "💬", desc: "Link via QR code", configFields: [] },
-  {
-    id: "telegram",
-    name: "Telegram",
-    icon: "✈️",
-    desc: "Requires a bot token",
-    configFields: [
-      { key: "botToken", label: "Bot Token", placeholder: "123456:ABCDEF", type: "password" },
-    ],
-  },
-  {
-    id: "discord",
-    name: "Discord",
-    icon: "🎮",
-    desc: "Requires a bot token",
-    configFields: [
-      { key: "token", label: "Bot Token", placeholder: "Your Discord bot token", type: "password" },
-    ],
-  },
-  {
-    id: "slack",
-    name: "Slack",
-    icon: "📋",
-    desc: "Requires bot + app tokens",
-    configFields: [
-      { key: "botToken", label: "Bot Token", placeholder: "xoxb-...", type: "password" },
-      { key: "appToken", label: "App Token", placeholder: "xapp-...", type: "password" },
-    ],
-  },
-  { id: "webchat", name: "WebChat", icon: "🌐", desc: "Built-in, always available", configFields: [], alwaysOn: true },
-  {
-    id: "signal",
-    name: "Signal",
-    icon: "🔒",
-    desc: "Requires signal-cli",
-    configFields: [],
-  },
-];
+// Validates standard Telegram Bot Tokens (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)
+const TELEGRAM_TOKEN_REGEX = /^\d+:[a-zA-Z0-9_-]+$/;
 
 export async function renderChannels(container) {
   container.innerHTML = `
     <div class="scrollable">
-      <h1 class="screen-title">Connect Your Channels</h1>
+      <h1 class="screen-title">Choose Your Interface</h1>
       <p class="screen-subtitle">
-        Choose where you'd like to talk to your AI assistant.
-        You can add more channels later.
+        How would you like to chat with your OpenClaw agent?
       </p>
 
-      <div class="section-label">Messaging Channels</div>
-      <div id="channel-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px;"></div>
-
-      <div id="channel-config-area"></div>
-
-      <div class="btn-group">
-        <button class="btn btn-ghost" id="btn-back">← Back</button>
-        <button class="btn btn-secondary" id="btn-skip">Skip for Now</button>
-        <button class="btn btn-primary" id="btn-continue">Continue</button>
+      <!-- STATE 1: SELECTION CARDS -->
+      <div id="selection-state" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px;">
+        <label class="toggle-card enabled" style="cursor: pointer;">
+          <input type="radio" name="channel_choice" value="local" checked style="display: none;">
+          <div class="toggle-left">
+            <div class="toggle-icon">🌐</div>
+            <div>
+              <div class="toggle-name">Local Webchat</div>
+              <div class="toggle-desc">Chat entirely privately in your browser. (Default)</div>
+            </div>
+          </div>
+          <div style="font-size: 13px; color: var(--text-secondary);">✓ Selected</div>
+        </label>
+        
+        <label class="toggle-card" style="cursor: pointer; border-color: var(--primary-color);">
+          <input type="radio" name="channel_choice" value="telegram" style="display: none;">
+          <div class="toggle-left">
+            <div class="toggle-icon">✈️</div>
+            <div>
+              <div class="toggle-name" style="color: var(--primary-color);">Telegram Messenger</div>
+              <div class="toggle-desc">Talk to your agent securely from your phone.</div>
+            </div>
+          </div>
+          <div style="font-size: 13px; color: var(--primary-color);">Recommended</div>
+        </label>
       </div>
+
+      <!-- STATE 2: TELEGRAM INPUT (Initially Hidden) -->
+      <div id="telegram-input-state" style="display: none; background: rgba(0,0,0,0.2); padding: 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+        <div style="margin-bottom: 15px;">
+          <h3 style="margin-top: 0; font-size: 16px;">Link your Telegram Bot</h3>
+          <ol style="font-size: 14px; color: var(--text-secondary); padding-left: 20px; margin-bottom: 0;">
+            <li style="margin-bottom: 6px;">Open Telegram on your phone or desktop.</li>
+            <li style="margin-bottom: 6px;">Search for <strong>@BotFather</strong> (the official verified account).</li>
+            <li style="margin-bottom: 6px;">Send the message <code>/newbot</code> and follow his prompts.</li>
+            <li>Copy the red <strong>HTTP API Token</strong> he gives you.</li>
+          </ol>
+        </div>
+        
+        <div class="input-group" style="margin-top: 20px;">
+          <label class="input-label">Telegram Bot Token:</label>
+          <input type="password" id="telegram-token-input" placeholder="e.g. 123456789:AAF_xxxxx..." class="input-field" autocomplete="off">
+          <div id="token-error" style="display: none; color: #ff5555; margin-top: 8px; font-size: 13px;">
+            Invalid token format. Must be Numbers:Letters.
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="btn-group">
+      <button class="btn btn-ghost" id="btn-back">← Back</button>
+      <button class="btn btn-primary" id="btn-next">Continue</button>
     </div>
   `;
 
-  const listEl = document.getElementById("channel-list");
-  const configArea = document.getElementById("channel-config-area");
+  const btnNext = container.querySelector("#btn-next");
+  const btnBack = container.querySelector("#btn-back");
+  const radios = container.querySelectorAll('input[name="channel_choice"]');
+  const telegramState = container.querySelector("#telegram-input-state");
+  const tokenInput = container.querySelector("#telegram-token-input");
+  const tokenError = container.querySelector("#token-error");
 
-  // Restore state
-  if (!wizardState.channels) wizardState.channels = {};
-  if (!wizardState.channelConfigs) wizardState.channelConfigs = {};
-
-  channels.forEach((ch) => {
-    const isOn = ch.alwaysOn || wizardState.channels[ch.id] || false;
-
-    const toggle = document.createElement("div");
-    toggle.className = `toggle-card ${isOn ? "enabled" : ""}`;
-    toggle.dataset.channel = ch.id;
-    toggle.innerHTML = `
-      <div class="toggle-left">
-        <div class="toggle-icon">${ch.icon}</div>
-        <div>
-          <div class="toggle-name">${ch.name}</div>
-          <div class="toggle-desc">${ch.desc}</div>
-        </div>
-      </div>
-      <div style="font-size: 13px; color: var(--text-secondary);">
-        ${ch.alwaysOn ? "Always on" : (isOn ? "✓ Enabled" : "Click to enable")}
-      </div>
-    `;
-
-    if (!ch.alwaysOn) {
-      toggle.addEventListener("click", () => {
-        const enabled = !wizardState.channels[ch.id];
-        wizardState.channels[ch.id] = enabled;
-        toggle.classList.toggle("enabled", enabled);
-
-        // Update label
-        const label = toggle.querySelector("div:last-child");
-        label.textContent = enabled ? "✓ Enabled" : "Click to enable";
-
-        // Show/hide config fields
-        renderChannelConfigs();
-      });
+  // Restore wizard state if the user clicked Back from a future screen
+  if (wizardState.channelMode === "telegram") {
+    container.querySelector('input[value="telegram"]').checked = true;
+    container.querySelector('input[value="telegram"]').closest('.toggle-card').classList.add('enabled');
+    container.querySelector('input[value="local"]').closest('.toggle-card').classList.remove('enabled');
+    telegramState.style.display = "block";
+    if (wizardState.telegramToken) {
+      tokenInput.value = wizardState.telegramToken;
+      validateTelegramToken();
     }
-
-    if (isOn) wizardState.channels[ch.id] = true;
-    listEl.appendChild(toggle);
-  });
-
-  renderChannelConfigs();
-
-  function renderChannelConfigs() {
-    configArea.innerHTML = "";
-
-    channels.forEach((ch) => {
-      if (!wizardState.channels[ch.id] || ch.configFields.length === 0) return;
-
-      const section = document.createElement("div");
-      section.style.marginBottom = "20px";
-      section.innerHTML = `<div class="section-label">${ch.icon} ${ch.name} Configuration</div>`;
-
-      ch.configFields.forEach((field) => {
-        const saved = wizardState.channelConfigs[ch.id]?.[field.key] || "";
-        const group = document.createElement("div");
-        group.className = "input-group";
-        group.innerHTML = `
-          <label class="input-label">${field.label}</label>
-          <input
-            type="${field.type || "text"}"
-            class="input-field channel-input"
-            data-channel="${ch.id}"
-            data-key="${field.key}"
-            placeholder="${field.placeholder}"
-            value="${saved}"
-            autocomplete="off"
-          />
-        `;
-        section.appendChild(group);
-      });
-
-      configArea.appendChild(section);
-    });
-
-    // Bind input saving
-    configArea.querySelectorAll(".channel-input").forEach((input) => {
-      input.addEventListener("input", () => {
-        const chId = input.dataset.channel;
-        const key = input.dataset.key;
-        if (!wizardState.channelConfigs[chId]) wizardState.channelConfigs[chId] = {};
-        wizardState.channelConfigs[chId][key] = input.value;
-      });
-    });
+  } else {
+    // channelMode already defaults to "local" in wizardState
   }
 
-  document.getElementById("btn-back").addEventListener("click", prevScreen);
-  document.getElementById("btn-skip").addEventListener("click", nextScreen);
-  document.getElementById("btn-continue").addEventListener("click", nextScreen);
+  // Toggle UI States based on selection
+  radios.forEach(radio => {
+    radio.parentElement.addEventListener("click", () => {
+      // Visually update the radio buttons
+      radios.forEach(r => {
+        r.checked = false;
+        r.parentElement.classList.remove("enabled");
+        const statusDiv = r.parentElement.querySelector("div:last-child");
+        if (r.value === "local") statusDiv.textContent = "";
+      });
+      
+      radio.checked = true;
+      radio.parentElement.classList.add("enabled");
+      const statusDiv = radio.parentElement.querySelector("div:last-child");
+      statusDiv.textContent = "✓ Selected";
+      
+      wizardState.channelMode = radio.value;
+
+      if (radio.value === "telegram") {
+        telegramState.style.display = "block";
+        validateTelegramToken();
+      } else {
+        telegramState.style.display = "none";
+        tokenError.style.display = "none";
+        btnNext.disabled = false;
+        btnNext.textContent = "Continue";
+      }
+    });
+  });
+
+  // Hot-validate the token as they type
+  function validateTelegramToken() {
+    const val = tokenInput.value.trim();
+    if (!val) {
+      btnNext.disabled = true;
+      tokenError.style.display = "none";
+      btnNext.textContent = "Verify & Continue";
+      return false;
+    }
+
+    if (!TELEGRAM_TOKEN_REGEX.test(val)) {
+      btnNext.disabled = true;
+      tokenError.style.display = "block";
+      tokenError.textContent = "Invalid token format. It should look like 123456:ABC-DEF...";
+      btnNext.textContent = "Invalid Token";
+      return false;
+    }
+
+    btnNext.disabled = false;
+    tokenError.style.display = "none";
+    btnNext.textContent = "Verify & Continue";
+    return true;
+  }
+
+  tokenInput.addEventListener("input", validateTelegramToken);
+
+  btnBack.addEventListener("click", () => prevScreen());
+
+  btnNext.addEventListener("click", async () => {
+    if (wizardState.channelMode === "telegram") {
+      const token = tokenInput.value.trim();
+      if (!validateTelegramToken()) return;
+
+      btnNext.disabled = true;
+      btnNext.textContent = "Verifying...";
+      
+      try {
+        // Ping the Telegram API to prove the token is real before allowing the user to continue
+        const res = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+        const json = await res.json();
+        
+        if (!json.ok) {
+           tokenError.textContent = "Token rejected by Telegram. Did you copy it correctly?";
+           tokenError.style.display = "block";
+           btnNext.disabled = false;
+           btnNext.textContent = "Verify & Continue";
+           return;
+        }
+
+        // Token is valid! Save it to state and proceed.
+        wizardState.telegramToken = token;
+        nextScreen();
+      } catch (err) {
+        tokenError.textContent = "Failed to connect to Telegram api. Check your internet.";
+        tokenError.style.display = "block";
+        btnNext.disabled = false;
+        btnNext.textContent = "Verify & Continue";
+      }
+    } else {
+      // Local Dashboard only
+      wizardState.telegramToken = null;
+      nextScreen();
+    }
+  });
 }

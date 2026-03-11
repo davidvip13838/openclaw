@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;" />
+        content="default-src 'self'; connect-src 'self' https://api.telegram.org http://localhost:18789; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;" />
     <title>OpenClaw Desktop</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -32,6 +32,7 @@
         <div class="step" data-step="5"><span class="dot"></span></div>
         <div class="step" data-step="6"><span class="dot"></span></div>
         <div class="step" data-step="7"><span class="dot"></span></div>
+        <div class="step" data-step="8"><span class="dot"></span></div>
     </div>
 
     <script src="app.js" type="module"></script>
