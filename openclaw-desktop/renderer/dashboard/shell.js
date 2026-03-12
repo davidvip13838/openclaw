@@ -4,9 +4,11 @@
  */
 
 import { renderStatusView } from "./views/status.js";
+import { renderSettingsView } from "./views/settings.js";
 
 const views = [
   { id: "status", label: "Status", icon: "🏠", render: renderStatusView },
+  { id: "settings", label: "Settings", icon: "⚙️", render: renderSettingsView },
 ];
 
 let currentView = "status";

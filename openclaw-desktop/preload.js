@@ -50,6 +50,10 @@ contextBridge.exposeInMainWorld("openclaw", {
     clear: () => ipcRenderer.invoke("sessions:clear"),
   },
 
+  uninstall: {
+    reset: () => ipcRenderer.invoke("uninstall:reset"),
+  },
+
   // Listen for background poller status updates
   onGatewayStatus: (callback) => {
     ipcRenderer.on("gateway:status-update", (_event, status) => callback(status));

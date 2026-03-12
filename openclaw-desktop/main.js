@@ -349,6 +349,51 @@ ipcMain.handle("sessions:clear", async () => {
   }
 });
 
+/**
+ * Full reset — stops daemon, deletes plist, removes state, uninstalls CLI
+ */
+ipcMain.handle("uninstall:reset", async () => {
+  const steps = [];
+
+  // Step 1: Stop gateway daemon
+  try {
+    const uid = process.getuid();
+    await runCmd(`launchctl bootout gui/${uid}/ai.openclaw.gateway`);
+    steps.push({ scope: "service", success: true });
+  } catch {
+    steps.push({ scope: "service", success: true }); // OK if not running
+  }
+
+  // Step 2: Remove launchd plist
+  try {
+    const plistPath = path.join(os.homedir(), "Library", "LaunchAgents", "ai.openclaw.gateway.plist");
+    if (fs.existsSync(plistPath)) fs.unlinkSync(plistPath);
+    steps.push({ scope: "plist", success: true });
+  } catch (error) {
+    steps.push({ scope: "plist", success: false, error: error.message });
+  }
+
+  // Step 3: Delete ~/.openclaw/ (config, sessions, auth, agents)
+  try {
+    if (fs.existsSync(CONFIG_DIR)) {
+      fs.rmSync(CONFIG_DIR, { recursive: true, force: true });
+    }
+    steps.push({ scope: "state", success: true });
+  } catch (error) {
+    steps.push({ scope: "state", success: false, error: error.message });
+  }
+
+  // Step 4: Uninstall CLI
+  try {
+    await runCmd("npm uninstall -g openclaw");
+    steps.push({ scope: "cli", success: true });
+  } catch (error) {
+    steps.push({ scope: "cli", success: false, error: error.message });
+  }
+
+  return { success: steps.every((s) => s.success), steps };
+});
+
 // ── Background Poller ────────────────────────────────────────
 
 let pollerInterval = null;
