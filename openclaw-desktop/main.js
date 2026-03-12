@@ -24,7 +24,7 @@ const FULL_PATH = (() => {
 const ALLOWED_COMMAND_PREFIXES = [
   "openclaw", "which", "node", "npm", "brew", "curl",
   "cat", "mkdir", "uname", "docker", "hdiutil", "open",
-  "nohup", "rm", "pgrep",
+  "nohup", "rm", "pgrep", "osascript",
 ];
 
 let mainWindow;
@@ -227,7 +227,7 @@ ipcMain.handle("write-auth-profile", async (_event, { provider, apiKey }) => {
  */
 ipcMain.handle("install-daemon", async (event) => {
   return new Promise((resolve) => {
-    const child = spawn("/bin/zsh", ["-c", "openclaw gateway install-daemon"], {
+    const child = spawn("/bin/zsh", ["-c", "openclaw gateway install --force"], {
       env: { ...process.env, PATH: FULL_PATH },
     });
 

@@ -1,11 +1,12 @@
 /**
  * Screen 2: Prerequisites Check
- * BLOCKS progression until Node.js ≥22 and OpenClaw CLI are both installed.
+ * BLOCKS progression until Homebrew, Node.js ≥22, and OpenClaw CLI are all installed.
+ * Flow: Homebrew → Node.js (via brew) → OpenClaw CLI (via npm)
  */
 import { nextScreen } from "../app.js";
 
 export async function renderPrerequisites(container) {
-  // Track live state locally (Bug #4 fix: avoid module-level mutable state)
+  let brewOk = false;
   let nodeOk = false;
   let clawOk = false;
 
@@ -16,6 +17,15 @@ export async function renderPrerequisites(container) {
     </p>
 
     <div class="status-list" id="prereq-list">
+      <div class="status-item" id="status-brew">
+        <div class="status-icon checking">⏳</div>
+        <div class="status-info">
+          <div class="status-name">Homebrew</div>
+          <div class="status-detail" id="brew-detail">Checking…</div>
+        </div>
+        <div class="status-action" id="brew-action"></div>
+      </div>
+
       <div class="status-item" id="status-node">
         <div class="status-icon checking">⏳</div>
         <div class="status-info">
@@ -50,7 +60,7 @@ export async function renderPrerequisites(container) {
   const hintEl = document.getElementById("prereq-hint");
 
   continueBtn.addEventListener("click", () => {
-    if (nodeOk && clawOk) {
+    if (brewOk && nodeOk && clawOk) {
       nextScreen();
     }
   });
@@ -65,6 +75,10 @@ export async function renderPrerequisites(container) {
   async function runChecks() {
     const results = await window.openclaw.checkPrerequisites();
 
+    const brewIcon = document.querySelector("#status-brew .status-icon");
+    const brewDetail = document.getElementById("brew-detail");
+    const brewAction = document.getElementById("brew-action");
+
     const nodeIcon = document.querySelector("#status-node .status-icon");
     const nodeDetail = document.getElementById("node-detail");
     const nodeAction = document.getElementById("node-action");
@@ -72,6 +86,21 @@ export async function renderPrerequisites(container) {
     const clawIcon = document.querySelector("#status-openclaw .status-icon");
     const clawDetail = document.getElementById("openclaw-detail");
     const clawAction = document.getElementById("openclaw-action");
+
+    // ── Homebrew ────────────────────────────────────────
+    const brewCheck = await window.openclaw.runCommand("which brew 2>/dev/null");
+    if (brewCheck.exitCode === 0) {
+      brewOk = true;
+      brewIcon.className = "status-icon success";
+      brewIcon.textContent = "✅";
+      brewDetail.textContent = "Installed — ready";
+    } else {
+      brewOk = false;
+      brewIcon.className = "status-icon error";
+      brewIcon.textContent = "❌";
+      brewDetail.textContent = "Not installed";
+      brewAction.innerHTML = `<button class="btn btn-secondary" id="btn-install-brew">Install Homebrew</button>`;
+    }
 
     // ── Node.js ─────────────────────────────────────────
     if (results.node.installed && results.node.sufficient) {
@@ -84,17 +113,24 @@ export async function renderPrerequisites(container) {
       nodeIcon.className = "status-icon warning";
       nodeIcon.textContent = "⚠️";
       nodeDetail.textContent = `v${results.node.version} — needs v22 or higher`;
-      nodeAction.innerHTML = `<button class="btn btn-secondary" id="btn-install-node">Upgrade Node.js</button>`;
+      if (brewOk) {
+        nodeAction.innerHTML = `<button class="btn btn-secondary" id="btn-install-node">Upgrade Node.js</button>`;
+      } else {
+        nodeDetail.textContent = `v${results.node.version} — install Homebrew first`;
+      }
     } else {
       nodeOk = false;
       nodeIcon.className = "status-icon error";
       nodeIcon.textContent = "❌";
-      nodeDetail.textContent = "Not installed";
-      nodeAction.innerHTML = `<button class="btn btn-secondary" id="btn-install-node">Install Node.js</button>`;
+      if (brewOk) {
+        nodeDetail.textContent = "Not installed";
+        nodeAction.innerHTML = `<button class="btn btn-secondary" id="btn-install-node">Install Node.js</button>`;
+      } else {
+        nodeDetail.textContent = "Install Homebrew first";
+      }
     }
 
     // ── OpenClaw CLI ────────────────────────────────────
-    // Double-check with 'which' to avoid false positives
     const whichCheck = await window.openclaw.runCommand("which openclaw 2>/dev/null && openclaw --version 2>/dev/null");
 
     if (results.openclaw.installed && whichCheck.exitCode === 0) {
@@ -106,9 +142,9 @@ export async function renderPrerequisites(container) {
       clawOk = false;
       clawIcon.className = "status-icon error";
       clawIcon.textContent = "❌";
-      clawDetail.textContent = "Not installed";
 
       if (nodeOk) {
+        clawDetail.textContent = "Not installed";
         clawAction.innerHTML = `<button class="btn btn-secondary" id="btn-install-openclaw">Install OpenClaw</button>`;
       } else {
         clawDetail.textContent = "Install Node.js first";
@@ -119,6 +155,11 @@ export async function renderPrerequisites(container) {
     updateContinueState();
 
     // ── Bind install buttons ────────────────────────────
+    const installBrewBtn = document.getElementById("btn-install-brew");
+    if (installBrewBtn) {
+      installBrewBtn.addEventListener("click", () => installHomebrew(installBrewBtn, brewIcon, brewDetail, brewAction));
+    }
+
     const installNodeBtn = document.getElementById("btn-install-node");
     if (installNodeBtn) {
       installNodeBtn.addEventListener("click", () => installNode(installNodeBtn, nodeIcon, nodeDetail, nodeAction, clawIcon, clawDetail, clawAction));
@@ -132,12 +173,13 @@ export async function renderPrerequisites(container) {
 
   // ── Update the continue button state ────────────────────
   function updateContinueState() {
-    if (nodeOk && clawOk) {
+    if (brewOk && nodeOk && clawOk) {
       continueBtn.disabled = false;
       hintEl.style.display = "none";
     } else {
       continueBtn.disabled = true;
       const missing = [];
+      if (!brewOk) missing.push("Homebrew");
       if (!nodeOk) missing.push("Node.js ≥ 22");
       if (!clawOk) missing.push("OpenClaw CLI");
       hintEl.textContent = `Still needed: ${missing.join(" and ")}`;
@@ -145,7 +187,55 @@ export async function renderPrerequisites(container) {
     }
   }
 
-  // ── Install Node.js via Homebrew ────────────────────────
+  // ── Install Homebrew ───────────────────────────────────
+  async function installHomebrew(btn, brewIcon, brewDetail, brewAction) {
+    btn.disabled = true;
+    btn.textContent = "Installing…";
+    brewDetail.textContent = "Downloading Homebrew — you'll see a password prompt…";
+    brewIcon.className = "status-icon checking";
+    brewIcon.innerHTML = '<span class="spinner">⏳</span>';
+
+    // Download the Homebrew install script, then run it with admin privileges
+    const download = await window.openclaw.runCommand(
+      "curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o /tmp/brew-install.sh 2>&1"
+    );
+    if (download.exitCode !== 0) {
+      brewIcon.className = "status-icon error";
+      brewIcon.textContent = "❌";
+      brewDetail.textContent = "Download failed — check your internet connection";
+      btn.textContent = "Retry";
+      btn.disabled = false;
+      updateContinueState();
+      return;
+    }
+
+    brewDetail.textContent = "Installing Homebrew — this may take a few minutes…";
+    const install = await window.openclaw.runCommand(
+      `osascript -e 'do shell script "NONINTERACTIVE=1 /bin/bash /tmp/brew-install.sh" with administrator privileges'`
+    );
+    await window.openclaw.runCommand("rm -f /tmp/brew-install.sh");
+
+    if (install.exitCode === 0) {
+      brewOk = true;
+      brewIcon.className = "status-icon success";
+      brewIcon.textContent = "✅";
+      brewDetail.textContent = "Installed — ready";
+      btn.remove();
+
+      // Re-run checks to enable Node.js install button
+      await runChecks();
+    } else {
+      brewIcon.className = "status-icon error";
+      brewIcon.textContent = "❌";
+      brewDetail.textContent = "Install failed — try again or visit brew.sh";
+      btn.textContent = "Retry";
+      btn.disabled = false;
+    }
+
+    updateContinueState();
+  }
+
+  // ── Install Node.js via Homebrew ───────────────────────
   async function installNode(btn, nodeIcon, nodeDetail, nodeAction, clawIcon, clawDetail, clawAction) {
     btn.disabled = true;
     btn.textContent = "Installing…";
@@ -153,7 +243,7 @@ export async function renderPrerequisites(container) {
     nodeIcon.className = "status-icon checking";
     nodeIcon.innerHTML = '<span class="spinner">⏳</span>';
 
-    const result = await window.openclaw.runCommand("brew install node@22 2>&1 || brew install node 2>&1");
+    const result = await window.openclaw.runCommand("brew install node 2>&1");
 
     if (result.exitCode === 0) {
       nodeOk = true;

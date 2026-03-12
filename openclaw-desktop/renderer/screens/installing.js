@@ -75,7 +75,7 @@ export async function renderInstalling(container) {
   });
 
   // ── Step 1: Write config ────────────────────────────────
-  await runStep(0, "config", async () => {
+  await runStep(stepIndexOf("config"), "config", async () => {
     // Write clean openclaw.json (no API keys — those go in auth profiles)
     const config = buildConfig();
     const result = await window.openclaw.writeConfig(config);
@@ -93,12 +93,12 @@ export async function renderInstalling(container) {
   });
 
   // ── Step 2: Set up workspace ────────────────────────────
-  await runStep(1, "workspace", async () => {
+  await runStep(stepIndexOf("workspace"), "workspace", async () => {
     await window.openclaw.runCommand("mkdir -p ~/.openclaw/workspace/skills");
   });
 
   // ── Step 3: Ensure OpenClaw CLI is installed ────────────
-  await runStep(2, "cli", async () => {
+  await runStep(stepIndexOf("cli"), "cli", async () => {
     const check = await window.openclaw.runCommand("which openclaw 2>/dev/null");
     if (check.exitCode === 0) {
       // Already installed
@@ -250,7 +250,10 @@ export async function renderInstalling(container) {
     if (check.exitCode !== 0) {
       throw new Error("CLI not available — skipped");
     }
-    await window.openclaw.runCommand("openclaw gateway install-daemon 2>&1 || true");
+    const installResult = await window.openclaw.runCommand("openclaw gateway install --force 2>&1");
+    if (installResult.exitCode !== 0) {
+      throw new Error("Failed to install gateway service");
+    }
   });
 
   // ── Step 5: Start gateway and verify ────────────────────
@@ -260,15 +263,12 @@ export async function renderInstalling(container) {
       throw new Error("CLI not available — can't start gateway");
     }
 
-    // Ensure workspace directory exists
+    // Ensure workspace directory exists so sandbox containers
+    // get a valid cwd inside their mount namespace (/workspace)
     await window.openclaw.runCommand("mkdir -p ~/.openclaw/workspace");
 
-    // Start the gateway from the workspace dir so sandbox containers
-    // get a valid cwd inside their mount namespace (/workspace)
-    await window.openclaw.runCommand("cd ~/.openclaw/workspace && openclaw gateway start 2>&1 || true");
-
-    // Also try running it directly in background as fallback
-    await window.openclaw.runCommand("cd ~/.openclaw/workspace && nohup openclaw gateway run --port 18789 --allow-unconfigured > /dev/null 2>&1 &");
+    // Start gateway via the installed daemon service (launchd on macOS)
+    await window.openclaw.runCommand("cd ~/.openclaw/workspace && openclaw gateway start 2>&1");
 
     // Poll until gateway responds
     updateDetail("gateway", "Waiting for gateway to respond…");
