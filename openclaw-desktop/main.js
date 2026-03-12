@@ -50,10 +50,6 @@ function createWindow() {
 
 app.whenReady().then(createWindow);
 
-app.on("window-all-closed", () => {
-  app.quit();
-});
-
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
@@ -253,3 +249,156 @@ function runCmd(command) {
     });
   });
 }
+
+// ── Layer 2: Typed IPC Handlers (Dashboard) ───────────────────
+
+/**
+ * Check if setup is complete (config file exists)
+ */
+ipcMain.handle("check-setup", async () => {
+  return fs.existsSync(CONFIG_PATH);
+});
+
+/**
+ * Get gateway status — returns { running, port, channels, model, config }
+ */
+ipcMain.handle("gateway:status", async () => {
+  const result = { running: false, port: 18789, channels: [], model: null, config: null };
+
+  // Check if gateway is responding
+  try {
+    const http = require("http");
+    const running = await new Promise((resolve) => {
+      const req = http.get("http://localhost:18789/", (res) => {
+        resolve(res.statusCode === 200 || res.statusCode === 401 || res.statusCode === 302);
+      });
+      req.on("error", () => resolve(false));
+      req.setTimeout(2000, () => { req.destroy(); resolve(false); });
+    });
+    result.running = running;
+  } catch {
+    result.running = false;
+  }
+
+  // Read config for model info
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+      result.config = config;
+      result.model = config.model || null;
+
+      // Extract channel names from config
+      if (config.channels) {
+        result.channels = Object.keys(config.channels);
+      }
+    }
+  } catch {
+    // Config read failed — not critical
+  }
+
+  return result;
+});
+
+/**
+ * Start the gateway daemon
+ */
+ipcMain.handle("gateway:start", async () => {
+  try {
+    await runCmd("openclaw gateway install --force");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Restart the gateway daemon (kill + let launchd re-launch)
+ */
+ipcMain.handle("gateway:restart", async () => {
+  try {
+    const uid = process.getuid();
+    await runCmd(`launchctl kickstart -k gui/${uid}/ai.openclaw.gateway`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Clear all sessions — removes session JSONL files and resets sessions.json
+ */
+ipcMain.handle("sessions:clear", async () => {
+  try {
+    const sessionsDir = path.join(CONFIG_DIR, "agents", "main", "sessions");
+    if (fs.existsSync(sessionsDir)) {
+      const files = fs.readdirSync(sessionsDir);
+      for (const file of files) {
+        if (file.endsWith(".jsonl")) {
+          fs.unlinkSync(path.join(sessionsDir, file));
+        }
+      }
+      // Reset sessions index
+      const sessionsJson = path.join(sessionsDir, "sessions.json");
+      if (fs.existsSync(sessionsJson)) {
+        fs.writeFileSync(sessionsJson, "{}", "utf-8");
+      }
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// ── Background Poller ────────────────────────────────────────
+
+let pollerInterval = null;
+
+function startPoller() {
+  if (pollerInterval) return;
+  pollerInterval = setInterval(async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      const http = require("http");
+      const running = await new Promise((resolve) => {
+        const req = http.get("http://localhost:18789/", (res) => {
+          resolve(res.statusCode === 200 || res.statusCode === 401 || res.statusCode === 302);
+        });
+        req.on("error", () => resolve(false));
+        req.setTimeout(2000, () => { req.destroy(); resolve(false); });
+      });
+
+      // Read config for model/channel info
+      let config = null;
+      try {
+        if (fs.existsSync(CONFIG_PATH)) {
+          config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+        }
+      } catch {}
+
+      mainWindow.webContents.send("gateway:status-update", {
+        running,
+        port: 18789,
+        channels: config?.channels ? Object.keys(config.channels) : [],
+        model: config?.model || null,
+        config,
+      });
+    } catch {
+      // Poller error — ignore
+    }
+  }, 15_000);
+}
+
+// Start polling when the window is ready
+app.whenReady().then(() => {
+  // Small delay to let the renderer load
+  setTimeout(startPoller, 3000);
+});
+
+app.on("window-all-closed", () => {
+  if (pollerInterval) {
+    clearInterval(pollerInterval);
+    pollerInterval = null;
+  }
+  app.quit();
+});
+

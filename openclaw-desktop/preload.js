@@ -1,11 +1,20 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("openclaw", {
+  // ── Layer 1: Raw shell commands (wizard) ──────────────────
+
   // Run a shell command, returns { stdout, stderr, exitCode }
   runCommand: (command) => ipcRenderer.invoke("run-command", command),
 
   // Run a command with streaming output (listen via onCommandOutput)
   runCommandStream: (command) => ipcRenderer.invoke("run-command-stream", command),
+
+  // Listen for streaming command output
+  onCommandOutput: (callback) => {
+    ipcRenderer.on("command-output", (_event, data) => callback(data));
+  },
+
+  // ── Shared handlers (used by both wizard and dashboard) ────
 
   // Check Node.js, npm, openclaw versions
   checkPrerequisites: () => ipcRenderer.invoke("check-prerequisites"),
@@ -26,8 +35,23 @@ contextBridge.exposeInMainWorld("openclaw", {
   // Open URL in default browser
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
 
-  // Listen for streaming command output
-  onCommandOutput: (callback) => {
-    ipcRenderer.on("command-output", (_event, data) => callback(data));
+  // Check if setup is complete
+  checkSetup: () => ipcRenderer.invoke("check-setup"),
+
+  // ── Layer 2: Typed IPC (dashboard) ────────────────────────
+
+  gateway: {
+    status: () => ipcRenderer.invoke("gateway:status"),
+    start: () => ipcRenderer.invoke("gateway:start"),
+    restart: () => ipcRenderer.invoke("gateway:restart"),
+  },
+
+  sessions: {
+    clear: () => ipcRenderer.invoke("sessions:clear"),
+  },
+
+  // Listen for background poller status updates
+  onGatewayStatus: (callback) => {
+    ipcRenderer.on("gateway:status-update", (_event, status) => callback(status));
   },
 });

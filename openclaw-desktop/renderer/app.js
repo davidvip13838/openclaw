@@ -1,6 +1,6 @@
 /**
- * OpenClaw Desktop — App Navigation Controller
- * Manages screen transitions and shared state.
+ * OpenClaw Desktop — App Controller
+ * Routes between Wizard Mode (first run) and Dashboard Mode (already set up).
  */
 
 import { renderWelcome } from "./screens/welcome.js";
@@ -11,6 +11,9 @@ import { renderSandbox } from "./screens/sandbox.js";
 import { renderInstalling } from "./screens/installing.js";
 import { renderPairing } from "./screens/pairing.js";
 import { renderComplete } from "./screens/complete.js";
+import { loadDashboard } from "./dashboard/shell.js";
+
+// ── Wizard screens (unchanged) ──────────────────────────────
 
 const screens = [
   { id: "welcome", render: renderWelcome, step: 1 },
@@ -35,10 +38,17 @@ export const wizardState = {
 };
 
 let currentIndex = 0;
+let mode = "wizard"; // "wizard" | "dashboard"
 
-/**
- * Navigate to a screen by index
- */
+// ── Mode Router ──────────────────────────────────────────────
+
+async function detectMode() {
+  const isSetUp = await window.openclaw.checkSetup();
+  return isSetUp ? "dashboard" : "wizard";
+}
+
+// ── Wizard Navigation ────────────────────────────────────────
+
 export async function goToScreen(index) {
   if (index < 0 || index >= screens.length) return;
 
@@ -74,16 +84,10 @@ export async function goToScreen(index) {
   await screen.render(container);
 }
 
-/**
- * Go to the next screen
- */
 export function nextScreen() {
   goToScreen(currentIndex + 1);
 }
 
-/**
- * Go to the previous screen
- */
 export function prevScreen() {
   goToScreen(currentIndex - 1);
 }
@@ -94,6 +98,21 @@ function sleep(ms) {
 
 // ── Boot ──────────────────────────────────────────────────────
 
-document.addEventListener("DOMContentLoaded", () => {
-  goToScreen(0);
+document.addEventListener("DOMContentLoaded", async () => {
+  mode = await detectMode();
+
+  if (mode === "dashboard") {
+    // Hide wizard UI elements and load dashboard
+    const indicator = document.getElementById("step-indicator");
+    if (indicator) indicator.classList.add("hidden");
+
+    const appContainer = document.getElementById("app");
+    appContainer.classList.add("dashboard-mode");
+
+    const container = document.getElementById("screen-container");
+    await loadDashboard(container);
+  } else {
+    // Load wizard (current behavior)
+    goToScreen(0);
+  }
 });
