@@ -394,6 +394,22 @@ ipcMain.handle("uninstall:reset", async () => {
   return { success: steps.every((s) => s.success), steps };
 });
 
+/**
+ * List active skills (ready only)
+ */
+ipcMain.handle("skills:list", async () => {
+  try {
+    const result = await runCmd("openclaw skills list --json");
+    const skills = JSON.parse(result.stdout || result);
+    const arr = Array.isArray(skills) ? skills : (skills.skills || []);
+    return arr
+      .filter(s => s.status === "ready" || s.eligible)
+      .map(s => ({ name: s.name, emoji: s.emoji || "🧩", description: s.description || "" }));
+  } catch {
+    return [];
+  }
+});
+
 // ── Background Poller ────────────────────────────────────────
 
 let pollerInterval = null;

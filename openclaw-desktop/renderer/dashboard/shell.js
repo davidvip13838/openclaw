@@ -4,10 +4,12 @@
  */
 
 import { renderStatusView } from "./views/status.js";
+import { renderSkillsView } from "./views/skills.js";
 import { renderSettingsView } from "./views/settings.js";
 
 const views = [
   { id: "status", label: "Status", icon: "🏠", render: renderStatusView },
+  { id: "skills", label: "Skills", icon: "🧩", render: renderSkillsView },
   { id: "settings", label: "Settings", icon: "⚙️", render: renderSettingsView },
 ];
 
