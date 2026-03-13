@@ -410,6 +410,59 @@ ipcMain.handle("skills:list", async () => {
   }
 });
 
+/**
+ * Start WhatsApp login — spawns the CLI command and streams output
+ * Returns { success, error? } when the process exits
+ */
+ipcMain.handle("whatsapp:login", async (event) => {
+  return new Promise((resolve) => {
+    const child = spawn("/bin/zsh", ["-c", "openclaw channels login --channel whatsapp"], {
+      env: { ...process.env, PATH: FULL_PATH },
+    });
+
+    let output = "";
+
+    child.stdout.on("data", (data) => {
+      const chunk = data.toString();
+      output += chunk;
+      event.sender.send("whatsapp:output", chunk);
+    });
+
+    child.stderr.on("data", (data) => {
+      const chunk = data.toString();
+      output += chunk;
+      event.sender.send("whatsapp:output", chunk);
+    });
+
+    child.on("close", (code) => {
+      const success = code === 0 || output.includes("✅ Linked");
+      resolve({ success, exitCode: code ?? 1, output });
+    });
+
+    // Store reference so we can kill it if needed
+    event.sender.once("whatsapp:cancel", () => {
+      try { child.kill(); } catch {}
+    });
+  });
+});
+
+/**
+ * Check if WhatsApp credentials exist (linked device)
+ */
+ipcMain.handle("whatsapp:check-linked", async () => {
+  const defaultAuthDir = path.join(CONFIG_DIR, "credentials", "whatsapp", "default");
+  const legacyAuthDir = path.join(CONFIG_DIR, "credentials");
+
+  // Check new-style path first, then legacy
+  const credsDefault = path.join(defaultAuthDir, "creds.json");
+  const credsLegacy = path.join(legacyAuthDir, "creds.json");
+
+  return {
+    linked: fs.existsSync(credsDefault) || fs.existsSync(credsLegacy),
+    authDir: fs.existsSync(credsDefault) ? defaultAuthDir : legacyAuthDir,
+  };
+});
+
 // ── Background Poller ────────────────────────────────────────
 
 let pollerInterval = null;

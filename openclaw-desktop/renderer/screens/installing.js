@@ -415,6 +415,15 @@ function buildConfig() {
         }
       }
     };
+  } else if (wizardState.channelMode === "whatsapp" && wizardState.whatsappPhone) {
+    config.channels = {
+      whatsapp: {
+        enabled: true,
+        dmPolicy: "allowlist",
+        selfChatMode: true,
+        allowFrom: [wizardState.whatsappPhone],
+      }
+    };
   }
 
   // Sandbox mode (Safe Mode)

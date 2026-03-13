@@ -1,11 +1,13 @@
 /**
  * Screen 4: Channel Setup
- * Dedicated UI for Telegram and Local Webchat.
+ * Dedicated UI for Telegram, WhatsApp, and Local Webchat.
  */
 import { nextScreen, prevScreen, wizardState } from "../app.js";
 
 // Validates standard Telegram Bot Tokens (e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11)
 const TELEGRAM_TOKEN_REGEX = /^\d+:[a-zA-Z0-9_-]+$/;
+// Validates E.164 phone numbers (e.g. +15555550123)
+const PHONE_REGEX = /^\+[1-9]\d{6,14}$/;
 
 export async function renderChannels(container) {
   container.innerHTML = `
@@ -15,7 +17,7 @@ export async function renderChannels(container) {
         How would you like to chat with your OpenClaw agent?
       </p>
 
-      <!-- STATE 1: SELECTION CARDS -->
+      <!-- SELECTION CARDS -->
       <div id="selection-state" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px;">
         <label class="toggle-card enabled" style="cursor: pointer;">
           <input type="radio" name="channel_choice" value="local" checked style="display: none;">
@@ -40,9 +42,21 @@ export async function renderChannels(container) {
           </div>
           <div style="font-size: 13px; color: var(--primary-color);">Recommended</div>
         </label>
+
+        <label class="toggle-card" style="cursor: pointer;">
+          <input type="radio" name="channel_choice" value="whatsapp" style="display: none;">
+          <div class="toggle-left">
+            <div class="toggle-icon">📱</div>
+            <div>
+              <div class="toggle-name" style="color: #25D366;">WhatsApp</div>
+              <div class="toggle-desc">Link your WhatsApp as a connected device.</div>
+            </div>
+          </div>
+          <div style="font-size: 13px; color: var(--text-secondary);"></div>
+        </label>
       </div>
 
-      <!-- STATE 2: TELEGRAM INPUT (Initially Hidden) -->
+      <!-- TELEGRAM INPUT (Hidden by default) -->
       <div id="telegram-input-state" style="display: none; background: rgba(0,0,0,0.2); padding: 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
         <div style="margin-bottom: 15px;">
           <h3 style="margin-top: 0; font-size: 16px;">Link your Telegram Bot</h3>
@@ -62,6 +76,25 @@ export async function renderChannels(container) {
           </div>
         </div>
       </div>
+
+      <!-- WHATSAPP INPUT (Hidden by default) -->
+      <div id="whatsapp-input-state" style="display: none; background: rgba(0,0,0,0.2); padding: 20px; border-radius: 8px; border: 1px solid rgba(37,211,102,0.2);">
+        <div style="margin-bottom: 15px;">
+          <h3 style="margin-top: 0; font-size: 16px; color: #25D366;">Link your WhatsApp</h3>
+          <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+            Your agent will appear as a linked device on your WhatsApp account.
+            We need your phone number to allowlist you as the owner.
+          </p>
+        </div>
+        
+        <div class="input-group">
+          <label class="input-label">Your WhatsApp Phone Number:</label>
+          <input type="tel" id="whatsapp-phone-input" placeholder="+15555550123" class="input-field" autocomplete="off">
+          <div id="phone-error" style="display: none; color: #ff5555; margin-top: 8px; font-size: 13px;">
+            Invalid format. Use international format with country code (e.g. +1234567890).
+          </div>
+        </div>
+      </div>
     </div>
     
     <div class="btn-group">
@@ -74,54 +107,73 @@ export async function renderChannels(container) {
   const btnBack = container.querySelector("#btn-back");
   const radios = container.querySelectorAll('input[name="channel_choice"]');
   const telegramState = container.querySelector("#telegram-input-state");
+  const whatsappState = container.querySelector("#whatsapp-input-state");
   const tokenInput = container.querySelector("#telegram-token-input");
   const tokenError = container.querySelector("#token-error");
+  const phoneInput = container.querySelector("#whatsapp-phone-input");
+  const phoneError = container.querySelector("#phone-error");
 
   // Restore wizard state if the user clicked Back from a future screen
   if (wizardState.channelMode === "telegram") {
-    container.querySelector('input[value="telegram"]').checked = true;
-    container.querySelector('input[value="telegram"]').closest('.toggle-card').classList.add('enabled');
-    container.querySelector('input[value="local"]').closest('.toggle-card').classList.remove('enabled');
+    selectRadio("telegram");
     telegramState.style.display = "block";
     if (wizardState.telegramToken) {
       tokenInput.value = wizardState.telegramToken;
       validateTelegramToken();
     }
-  } else {
-    // channelMode already defaults to "local" in wizardState
+  } else if (wizardState.channelMode === "whatsapp") {
+    selectRadio("whatsapp");
+    whatsappState.style.display = "block";
+    if (wizardState.whatsappPhone) {
+      phoneInput.value = wizardState.whatsappPhone;
+      validateWhatsAppPhone();
+    }
+  }
+
+  function selectRadio(value) {
+    radios.forEach(r => {
+      r.checked = false;
+      r.parentElement.classList.remove("enabled");
+      const statusDiv = r.parentElement.querySelector("div:last-child");
+      if (r.value === "local") statusDiv.textContent = "";
+      else if (r.value === "telegram") statusDiv.textContent = "Recommended";
+      else statusDiv.textContent = "";
+    });
+    const target = container.querySelector(`input[value="${value}"]`);
+    if (target) {
+      target.checked = true;
+      target.parentElement.classList.add("enabled");
+      const statusDiv = target.parentElement.querySelector("div:last-child");
+      statusDiv.textContent = "✓ Selected";
+    }
   }
 
   // Toggle UI States based on selection
   radios.forEach(radio => {
     radio.parentElement.addEventListener("click", () => {
-      // Visually update the radio buttons
-      radios.forEach(r => {
-        r.checked = false;
-        r.parentElement.classList.remove("enabled");
-        const statusDiv = r.parentElement.querySelector("div:last-child");
-        if (r.value === "local") statusDiv.textContent = "";
-      });
-      
-      radio.checked = true;
-      radio.parentElement.classList.add("enabled");
-      const statusDiv = radio.parentElement.querySelector("div:last-child");
-      statusDiv.textContent = "✓ Selected";
-      
+      selectRadio(radio.value);
       wizardState.channelMode = radio.value;
 
+      // Show/hide input sections
+      telegramState.style.display = radio.value === "telegram" ? "block" : "none";
+      whatsappState.style.display = radio.value === "whatsapp" ? "block" : "none";
+
+      // Reset errors
+      tokenError.style.display = "none";
+      phoneError.style.display = "none";
+
       if (radio.value === "telegram") {
-        telegramState.style.display = "block";
         validateTelegramToken();
+      } else if (radio.value === "whatsapp") {
+        validateWhatsAppPhone();
       } else {
-        telegramState.style.display = "none";
-        tokenError.style.display = "none";
         btnNext.disabled = false;
         btnNext.textContent = "Continue";
       }
     });
   });
 
-  // Hot-validate the token as they type
+  // Hot-validate the Telegram token as they type
   function validateTelegramToken() {
     const val = tokenInput.value.trim();
     if (!val) {
@@ -145,7 +197,32 @@ export async function renderChannels(container) {
     return true;
   }
 
+  // Hot-validate the WhatsApp phone number as they type
+  function validateWhatsAppPhone() {
+    const val = phoneInput.value.trim();
+    if (!val) {
+      btnNext.disabled = true;
+      phoneError.style.display = "none";
+      btnNext.textContent = "Continue";
+      return false;
+    }
+
+    if (!PHONE_REGEX.test(val)) {
+      btnNext.disabled = true;
+      phoneError.style.display = "block";
+      phoneError.textContent = "Invalid format. Use international format like +1234567890";
+      btnNext.textContent = "Invalid Number";
+      return false;
+    }
+
+    btnNext.disabled = false;
+    phoneError.style.display = "none";
+    btnNext.textContent = "Continue";
+    return true;
+  }
+
   tokenInput.addEventListener("input", validateTelegramToken);
+  phoneInput.addEventListener("input", validateWhatsAppPhone);
 
   btnBack.addEventListener("click", () => prevScreen());
 
@@ -179,9 +256,17 @@ export async function renderChannels(container) {
         btnNext.disabled = false;
         btnNext.textContent = "Verify & Continue";
       }
+    } else if (wizardState.channelMode === "whatsapp") {
+      const phone = phoneInput.value.trim();
+      if (!validateWhatsAppPhone()) return;
+
+      wizardState.whatsappPhone = phone;
+      wizardState.telegramToken = null;
+      nextScreen();
     } else {
       // Local Dashboard only
       wizardState.telegramToken = null;
+      wizardState.whatsappPhone = null;
       nextScreen();
     }
   });

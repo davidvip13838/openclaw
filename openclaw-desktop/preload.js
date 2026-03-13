@@ -58,6 +58,17 @@ contextBridge.exposeInMainWorld("openclaw", {
     list: () => ipcRenderer.invoke("skills:list"),
   },
 
+  whatsapp: {
+    login: () => ipcRenderer.invoke("whatsapp:login"),
+    checkLinked: () => ipcRenderer.invoke("whatsapp:check-linked"),
+    onOutput: (callback) => {
+      ipcRenderer.on("whatsapp:output", (_event, data) => callback(data));
+    },
+    cancel: () => {
+      ipcRenderer.send("whatsapp:cancel");
+    },
+  },
+
   // Listen for background poller status updates
   onGatewayStatus: (callback) => {
     ipcRenderer.on("gateway:status-update", (_event, status) => callback(status));

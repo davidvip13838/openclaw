@@ -32,8 +32,9 @@ export const wizardState = {
   apiKey: "",
   model: "",
   customBaseUrl: "",
-  channelMode: "local", // "local" | "telegram"
+  channelMode: "local", // "local" | "telegram" | "whatsapp"
   telegramToken: null,
+  whatsappPhone: null,
   sandbox: { enabled: false },
 };
 

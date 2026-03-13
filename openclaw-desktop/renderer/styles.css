@@ -1398,3 +1398,21 @@ body {
   color: var(--text-primary);
 }
 
+/* ── WhatsApp QR Display ──────────────────────────────────────── */
+
+.whatsapp-qr-display {
+  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: 0;
+  background: #ffffff;
+  color: #000000;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  display: inline-block;
+  text-align: center;
+  white-space: pre;
+  user-select: none;
+  box-shadow: 0 0 20px rgba(37, 211, 102, 0.15);
+  border: 2px solid rgba(37, 211, 102, 0.3);
+}
