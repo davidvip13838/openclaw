@@ -12,7 +12,16 @@ const providers = [
     desc: "GPT-4.1, o3, o4-mini",
     models: ["openai/gpt-4.1", "openai/o3", "openai/o4-mini", "openai/gpt-4.1-mini", "openai/gpt-4.1-nano"],
     keyPlaceholder: "sk-...",
-    keyHint: "Find your key at platform.openai.com/api-keys",
+    keyHint: "Find your key at",
+    keyUrl: "https://platform.openai.com/api-keys",
+    keyUrlLabel: "platform.openai.com/api-keys",
+    keySteps: [
+      'Click <strong>"Get your API key"</strong> above to open OpenAI',
+      'Sign in or create a free account',
+      'Click <strong>"Create new secret key"</strong>',
+      'Give it any name and click <strong>Create</strong>',
+      'Copy the key (starts with <code>sk-</code>) and paste it above',
+    ],
   },
   {
     id: "anthropic",
@@ -25,7 +34,16 @@ const providers = [
       "anthropic/claude-haiku-3-5-20241022",
     ],
     keyPlaceholder: "sk-ant-...",
-    keyHint: "Find your key at console.anthropic.com/settings/keys",
+    keyHint: "Find your key at",
+    keyUrl: "https://console.anthropic.com/settings/keys",
+    keyUrlLabel: "console.anthropic.com",
+    keySteps: [
+      'Click <strong>"Get your API key"</strong> above to open Anthropic Console',
+      'Sign in or create an account',
+      'Click <strong>"Create Key"</strong> in the API Keys section',
+      'Name your key and click <strong>Create Key</strong>',
+      'Copy the key (starts with <code>sk-ant-</code>) and paste it above',
+    ],
   },
   {
     id: "google",
@@ -37,7 +55,36 @@ const providers = [
       "google/gemini-2.5-flash",
     ],
     keyPlaceholder: "AIza...",
-    keyHint: "Find your key at aistudio.google.com/apikey",
+    keyHint: "Find your key at",
+    keyUrl: "https://aistudio.google.com/apikey",
+    keyUrlLabel: "aistudio.google.com",
+    keySteps: [
+      'Click <strong>"Get your API key"</strong> above to open Google AI Studio',
+      'Sign in with your Google account',
+      'Click <strong>"Create API key"</strong>',
+      'Select or create a Google Cloud project',
+      'Copy the key (starts with <code>AIza</code>) and paste it above',
+    ],
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15.5v-2.09c-1.35-.14-2.58-.69-3.54-1.51l1.05-1.27c.77.67 1.63 1.07 2.49 1.17V10.7c-2.11-.44-3.5-1.4-3.5-3.15 0-1.77 1.45-3.05 3.5-3.22V3h1.25v1.35c1.13.13 2.17.56 3.04 1.18l-.95 1.32c-.7-.5-1.43-.82-2.09-.92v2.87c2.15.46 3.5 1.34 3.5 3.17 0 1.83-1.42 3.1-3.5 3.3v2.23H11zm0-11.63c-.95.16-1.5.7-1.5 1.38 0 .67.55 1.1 1.5 1.39V5.87zm1.25 7.9c1-.17 1.5-.73 1.5-1.42s-.5-1.11-1.5-1.41v2.83z" fill="#4D6BFE"/></svg>`,
+    desc: "DeepSeek V3, R1 Reasoning",
+    models: [
+      "deepseek/deepseek-chat",
+      "deepseek/deepseek-reasoner",
+    ],
+    keyPlaceholder: "sk-...",
+    keyHint: "Get your key at",
+    keyUrl: "https://platform.deepseek.com/api_keys",
+    keyUrlLabel: "platform.deepseek.com",
+    keySteps: [
+      'Click <strong>"Get your API key"</strong> above to open DeepSeek',
+      'Sign in or create an account (phone number or email)',
+      'Go to <strong>API Keys</strong> and click <strong>"Create new API key"</strong>',
+      'Copy the key (starts with <code>sk-</code>) and paste it above',
+    ],
   },
   {
     id: "custom",
@@ -72,6 +119,12 @@ export async function renderProvider(container) {
             autocomplete="off"
           />
           <div class="input-hint" id="api-key-hint"></div>
+          <a class="api-key-link-btn" id="api-key-link" style="display: none;" href="#">🔗 Get your API key →</a>
+
+          <details class="api-key-guide" id="api-key-guide" style="display: none;">
+            <summary>📖 How do I get a key?</summary>
+            <ol id="api-key-steps"></ol>
+          </details>
         </div>
 
         <div class="input-group" id="model-group">
@@ -148,7 +201,28 @@ export async function renderProvider(container) {
     // Show config
     configSection.style.display = "block";
     apiKeyInput.placeholder = provider.keyPlaceholder;
-    apiKeyHint.textContent = provider.keyHint;
+
+    // Render hint with clickable link
+    const apiKeyLink = document.getElementById("api-key-link");
+    if (provider.keyUrl) {
+      apiKeyHint.innerHTML = `${provider.keyHint} <a href="#" class="hint-link" data-url="${provider.keyUrl}">${provider.keyUrlLabel}</a>`;
+      apiKeyLink.style.display = "inline-block";
+      apiKeyLink.dataset.url = provider.keyUrl;
+    } else {
+      apiKeyHint.textContent = provider.keyHint;
+      apiKeyLink.style.display = "none";
+    }
+
+    // Populate step-by-step guide
+    const guideEl = document.getElementById("api-key-guide");
+    const stepsEl = document.getElementById("api-key-steps");
+    if (provider.keySteps && provider.keySteps.length > 0) {
+      guideEl.style.display = "block";
+      guideEl.removeAttribute("open"); // collapse when switching providers
+      stepsEl.innerHTML = provider.keySteps.map(s => `<li>${s}</li>`).join("");
+    } else {
+      guideEl.style.display = "none";
+    }
 
     if (provider.id === "custom") {
       modelGroup.style.display = "none";
@@ -180,6 +254,15 @@ export async function renderProvider(container) {
   }
 
   apiKeyInput.addEventListener("input", validateForm);
+
+  // Handle clicks on hint links and the "Get your API key" button
+  container.addEventListener("click", (e) => {
+    const link = e.target.closest("[data-url]");
+    if (link) {
+      e.preventDefault();
+      window.openclaw.openExternal(link.dataset.url);
+    }
+  });
 
   continueBtn.addEventListener("click", () => {
     wizardState.apiKey = apiKeyInput.value.trim();

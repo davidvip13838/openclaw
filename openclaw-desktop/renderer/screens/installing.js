@@ -375,10 +375,12 @@ function buildConfig() {
     },
   };
 
-  // Set the primary model
+  // Set the primary model + auto-fallback for resilience
   if (wizardState.provider && wizardState.model) {
+    const fallback = getFallbackModel(wizardState.model);
     config.agents.defaults.model = {
       primary: wizardState.model,
+      ...(fallback ? { fallbacks: [fallback] } : {}),
     };
   }
 
@@ -439,4 +441,33 @@ function buildConfig() {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Map a primary model to a sensible cheaper fallback for resilience.
+ * When the primary returns 503/overloaded, the engine automatically tries this.
+ */
+function getFallbackModel(primary) {
+  const fallbacks = {
+    // Google
+    "google/gemini-2.5-pro":   "google/gemini-2.5-flash",
+    "google/gemini-2.5-flash": null, // already the cheapest
+
+    // OpenAI
+    "openai/gpt-4.1":      "openai/gpt-4.1-mini",
+    "openai/o3":           "openai/gpt-4.1",
+    "openai/o4-mini":      "openai/gpt-4.1-mini",
+    "openai/gpt-4.1-mini": "openai/gpt-4.1-nano",
+    "openai/gpt-4.1-nano": null,
+
+    // Anthropic
+    "anthropic/claude-opus-4-0-20250609":  "anthropic/claude-sonnet-4-20250514",
+    "anthropic/claude-sonnet-4-20250514":  "anthropic/claude-haiku-3-5-20241022",
+    "anthropic/claude-haiku-3-5-20241022": null,
+
+    // DeepSeek
+    "deepseek/deepseek-reasoner": "deepseek/deepseek-chat",
+    "deepseek/deepseek-chat":     null,
+  };
+  return fallbacks[primary] ?? null;
 }

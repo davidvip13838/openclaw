@@ -1416,3 +1416,106 @@ body {
   box-shadow: 0 0 20px rgba(37, 211, 102, 0.15);
   border: 2px solid rgba(37, 211, 102, 0.3);
 }
+
+/* ── API Key Links ────────────────────────────────────────────── */
+
+.hint-link {
+  color: var(--primary-color);
+  text-decoration: underline;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+
+.hint-link:hover {
+  opacity: 0.8;
+}
+
+.api-key-link-btn {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 8px 16px;
+  background: rgba(var(--primary-rgb, 99, 102, 241), 0.15);
+  color: var(--primary-color);
+  border: 1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.3);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.api-key-link-btn:hover {
+  background: rgba(var(--primary-rgb, 99, 102, 241), 0.25);
+  border-color: var(--primary-color);
+}
+
+/* ── API Key Guide Accordion ──────────────────────────────────── */
+
+.api-key-guide {
+  margin-top: 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.api-key-guide summary {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--transition), background var(--transition);
+  list-style: none;
+}
+
+.api-key-guide summary::-webkit-details-marker {
+  display: none;
+}
+
+.api-key-guide summary::before {
+  content: "▸ ";
+  font-size: 11px;
+  transition: transform 0.2s;
+  display: inline-block;
+}
+
+.api-key-guide[open] summary::before {
+  content: "▾ ";
+}
+
+.api-key-guide summary:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.api-key-guide ol {
+  margin: 0;
+  padding: 8px 14px 14px 32px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.api-key-guide ol li {
+  margin-bottom: 4px;
+  padding-left: 4px;
+}
+
+.api-key-guide ol li:last-child {
+  margin-bottom: 0;
+}
+
+.api-key-guide ol li strong {
+  color: var(--text-primary);
+}
+
+.api-key-guide ol li code {
+  font-family: "Menlo", "Monaco", monospace;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
